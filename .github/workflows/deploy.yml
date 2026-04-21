@@ -2,14 +2,14 @@ name: deployToAWS
 
 on:
   push:
-    branches: [master,dev,test]
+    branches: [main,dev,test]
   workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     environment:
-      name: lambdaDeploy
+      name: awsDeploy
     steps:
       - name: Extract branch name
         shell: bash
@@ -17,7 +17,7 @@ jobs:
         id: extract_branch
 
       - name: Print branch name
-        run: 'echo "target brach: ${{ steps.extract_branch.outputs.branch }}"'
+        run: 'echo "target branch: ${{ steps.extract_branch.outputs.branch }}"'
 
       - name: Print github login info
         run: echo USER

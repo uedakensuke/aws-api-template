@@ -51,7 +51,7 @@
 ## 事前準備
 
 1. secret設定
-  - 下記のsecret設定がGithub上で必要
+  - 下記のsecret設定がGithub上で必要（awsDeployという名前でEnvironment secretsを作成して設定すること）
     - ROLE_ARN
       - AWSにアクセスする為のIAMロールのARNを指定する
       - このロールには、lambdaやECRを書き換える権限を与えておくこと
@@ -74,6 +74,11 @@
 
 ## デプロイ
 ソースコードを作成し、レポジトリにpushするとgithub actionのトリガーがかかり自動的にAWSにデプロイされます
+
+- 対象となるブランチは下記です
+  - master,main,dev,test
+- 対象ブランチを変更したい場合は、下記ファイルの`branches`の値を書き換えてください
+  - `.github\workflows\deploy.yml`
 
 ### Lambdaのコードについて
 - 最終的にデプロイされるLambdaの中身は「lambda/（関数名）」と「common」フォルダの中身から下記となります
