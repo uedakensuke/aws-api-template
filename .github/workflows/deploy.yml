@@ -1,0 +1,159 @@
+name: deployToAWS
+
+on:
+  push:
+    branches: [master,dev,test]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: lambdaDeploy
+    steps:
+      - name: Extract branch name
+        shell: bash
+        run: echo "::set-output name=branch::${GITHUB_REF#refs/heads/}"
+        id: extract_branch
+
+      - name: Print branch name
+        run: 'echo "target brach: ${{ steps.extract_branch.outputs.branch }}"'
+
+      - name: Print github login info
+        run: echo USER
+        env:
+          USER: ${{ github.event.sender.login }}
+  
+      # diskの空き容量を増やす（disk容量不足でエラーになった為に追加）
+      - name: docker system prune
+        run: docker system prune -a --force
+
+      - name: docker system df
+        run: docker system df
+
+      - name: df
+        run: df -h
+
+      # slack通知（開始）
+      - name: Slack Notification on Start
+        uses: slackapi/slack-github-action@v1.18.0
+        with:
+          payload: |
+            {
+              "text": "${{ github.repository }} ${{ steps.extract_branch.outputs.branch }}",
+              "blocks" : [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "Deploy Started! please wait DEPLOY SUCCESS notification. it will take a few minutes."
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "${{ github.repository }} ${{ steps.extract_branch.outputs.branch }}"
+                  }
+                },
+                {
+                  "type": "context",
+                  "elements": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "Author: <https://github.com/${{ github.event.sender.login }}|@${{ github.event.sender.login }}>"
+                    }
+                  ]
+                }                              
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.extract_branch.outputs.branch }}
+          token: ${{ secrets._GITHUB_PAT }}
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.ROLE_ARN }}
+          aws-region: ap-northeast-1
+
+      - uses: actions/setup-python@v1
+        with:
+          python-version: 3.9
+
+      - name: install python packages needed to run deploy.py
+        run: pip install boto3 boto3-stubs[lambda] boto3-stubs[ecr] deterministic_zip docker
+
+      - name: run deploy.py script
+        # 単にbashとすると、github actionsの仕様でbash -eで実行されてしまい、
+        # python中でエラーになった場合に標準出力がとれなくなるので、
+        # 明示的にコマンドを指定
+        shell: bash -x {0}
+        run: |
+          std_out=$(python script/deploy.py ${{ github.repository }} ${{ steps.extract_branch.outputs.branch }} ${{ secrets.ECR_REGISTRY }} 2>&1)
+          echo "$std_out"
+          # エスケープ処理
+          std_out="${std_out//$'\n'/\\n}"
+          echo "::set-output name=std_out::$std_out"        
+        id: run_deploy
+
+      - name: docker system df
+        run: docker system df
+
+      - name: docker images -a
+        run: docker images -a
+
+      - name: docker ps -a --no-trunc
+        run: docker ps -a --no-trunc
+
+      - name: df
+        run: df -h
+
+      #-- Slack通知 --#
+      # 成功
+      - name: Slack Notification on Success
+        if: success()
+        uses: slackapi/slack-github-action@v1.18.0
+        with:
+          payload: |
+            {
+              "text": "${{ github.repository }} ${{ steps.extract_branch.outputs.branch }}",
+              "attachments" : [
+                {
+                  "color": "good",
+                  "title": "Deploy Success",
+                  "text":"${{ steps.run_deploy.outputs.std_out }}",
+                  "author_name":"${{ github.event.sender.login }}"
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      # 失敗
+      - name: Slack Notification on Failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.18.0
+        with:
+          payload: |
+            {
+              "text": "${{ github.repository }} ${{ steps.extract_branch.outputs.branch }}",
+              "attachments" : [
+                {
+                  "color": "danger",
+                  "title": "Deploy Failure",
+                  "text":"${{ steps.run_deploy.outputs.std_out }}",
+                  "author_name":"${{ github.event.sender.login }}"
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
