@@ -2,7 +2,7 @@ name: deployToAWS
 
 on:
   push:
-    branches: [main,dev,test]
+    branches: [ master, main, dev, test ]
   workflow_dispatch:
 
 jobs:
@@ -10,6 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: awsDeploy
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - name: Extract branch name
         shell: bash
@@ -17,13 +20,13 @@ jobs:
         id: extract_branch
 
       - name: Print branch name
-        run: 'echo "target branch: ${{ steps.extract_branch.outputs.branch }}"'
+        run: "echo \"target branch: ${{ steps.extract_branch.outputs.branch }}\""
 
       - name: Print github login info
         run: echo USER
         env:
           USER: ${{ github.event.sender.login }}
-  
+
       # diskの空き容量を増やす（disk容量不足でエラーになった為に追加）
       - name: docker system prune
         run: docker system prune -a --force
@@ -86,10 +89,11 @@ jobs:
 
       - uses: actions/setup-python@v1
         with:
-          python-version: 3.9
+          python-version: 3.12.13
 
       - name: install python packages needed to run deploy.py
-        run: pip install boto3 boto3-stubs[lambda] boto3-stubs[ecr] deterministic_zip docker
+        run: pip install boto3 boto3-stubs[lambda] boto3-stubs[ecr] deterministic_zip
+          docker
 
       - name: run deploy.py script
         # 単にbashとすると、github actionsの仕様でbash -eで実行されてしまい、

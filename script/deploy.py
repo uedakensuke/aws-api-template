@@ -15,8 +15,8 @@ if __name__ == "__main__":
                 sys.argv
             )
         )
-    repository_name, branch_name = sys.argv[1:3]    
-    ecr_registry=sys.argv[3] if len(sys.argv)>=4 else None
+    repository_name, branch_name = sys.argv[1:3]
+    ecr_registry = sys.argv[3] if len(sys.argv) >= 4 else None
 
     aws = AwsUploader(
         repository_name,

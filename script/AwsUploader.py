@@ -121,7 +121,9 @@ class AwsUploader:
         )
 
         if not DOCKER_NOT_FOUND:
-            self.docker_client = DockerClient.from_env()
+            self.docker_client = (
+                DockerClient.from_env()  # pyright: ignore[reportPossiblyUnboundVariable]
+            )
             self._docker_login()
 
     @staticmethod
@@ -134,7 +136,7 @@ class AwsUploader:
         region: str,
         repo_name: str,
         branch_name: str,
-        ecr_name: str|None,
+        ecr_name: str | None,
     ):
         auth = CognitoAuth(
             user_name,
@@ -186,7 +188,7 @@ class AwsUploader:
             )
             return None
 
-        if info["Configuration"]["CodeSha256"] == hash:
+        if info["Configuration"].get("CodeSha256") == hash:
             LOGGER.append(
                 "- {}\n    --> code is not changed. skip upload".format(
                     lambda_func_name
@@ -205,7 +207,7 @@ class AwsUploader:
 
     def upload_function(
         self, func_name, func_dir_path, temp_dir_path, common_dir_path=None
-    ) -> dict:
+    ) -> str | None:
         lambda_func_name = "{}-{}-{}".format(
             self.repo_name, self.branch_name, func_name
         )
@@ -288,7 +290,7 @@ class AwsUploader:
     def upload_containers(
         self,
         root_dir_path: str,
-        common_dir_path: str = None,
+        common_dir_path: str | None = None,
         *,
         build_args: dict = {},
     ):
@@ -354,7 +356,7 @@ class AwsUploader:
             self.docker_client.images.build(
                 path=docker_file_folder_path, tag=tag, buildargs=build_args, rm=True
             )
-        except BuildError as ex:
+        except BuildError as ex:  # pyright: ignore[reportPossiblyUnboundVariable]
             LOGGER.append("error occur when running `docker build`")
             raise Exception(
                 list(ex.build_log)
@@ -371,11 +373,13 @@ class AwsUploader:
 
     def _docker_login(self):
         token = self.ecr_client.get_authorization_token()
-        username, password = (
-            base64.b64decode(token["authorizationData"][0]["authorizationToken"])
-            .decode()
-            .split(":")
-        )
-        self.docker_client.login(
-            username, password, registry=token["authorizationData"][0]["proxyEndpoint"]
-        )
+        auth_data = token["authorizationData"][0]
+        if "authorizationToken" in auth_data and "proxyEndpoint" in auth_data:
+            username, password = (
+                base64.b64decode(auth_data["authorizationToken"]).decode().split(":")
+            )
+            self.docker_client.login(
+                username, password, registry=auth_data["proxyEndpoint"]
+            )
+            return True
+        return False
